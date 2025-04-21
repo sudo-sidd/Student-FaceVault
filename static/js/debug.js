@@ -119,8 +119,8 @@ async function refreshAdminData() {
         }
     }
     
-    // Schedule next refresh
-    setTimeout(refreshAdminData, 30000);
+    // Schedule next refresh at a much longer interval (5 minutes instead of 30 seconds)
+    setTimeout(refreshAdminData, 300000); // 5 minutes
 }
 
 // Update the departments list

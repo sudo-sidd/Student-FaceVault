@@ -162,25 +162,28 @@
                                 </div>
                                 <div class="card-body">
                                     <form id="createGalleryForm">
-                                        <div class="row mb-3">
-                                            <div class="col-md-6">
-                                                <label for="galleryYear" class="form-label">Batch Year</label>
-                                                <select id="galleryYear" class="form-select" required>
-                                                    <option value="" selected disabled>Select Batch Year</option>
-                                                    <!-- Will be populated dynamically -->
-                                                </select>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label for="galleryDepartment" class="form-label">Department</label>
-                                                <select id="galleryDepartment" class="form-select" required>
-                                                    <option value="" selected disabled>Select Department</option>
-                                                    <!-- Will be populated dynamically -->
-                                                </select>
-                                            </div>
+                                        <div class="mb-3">
+                                            <label for="galleryYear" class="form-label">Batch Year</label>
+                                            <select id="galleryYear" class="form-select" required>
+                                                <option value="" selected disabled>Select Batch Year</option>
+                                                <!-- Will be populated dynamically -->
+                                            </select>
                                         </div>
+                                        <div class="mb-3">
+                                            <label for="galleryDepartment" class="form-label">Department</label>
+                                            <select id="galleryDepartment" class="form-select" required>
+                                                <option value="" selected disabled>Select Department</option>
+                                                <!-- Will be populated dynamically -->
+                                            </select>
+                                        </div>
+                                        <!-- <div class="mt-2 d-grid">
+                                            <button type="button" id="debugDropdowns" class="btn btn-sm btn-warning">
+                                                <i class="fas fa-bug me-2"></i>Debug Database & Dropdowns
+                                            </button>
+                                        </div> -->
                                         <div class="mb-3 form-check">
-                                            <input type="checkbox" id="updateExisting" class="form-check-input">
-                                            <label for="updateExisting" class="form-check-label">Update existing gallery (if available)</label>
+                                            <input type="checkbox" class="form-check-input" id="updateExisting">
+                                            <label class="form-check-label" for="updateExisting">Update existing gallery (if available)</label>
                                         </div>
                                         <div class="d-grid">
                                             <button type="submit" id="btnCreateGallery" class="btn btn-success">
@@ -237,14 +240,17 @@
         <!-- Face Recognition Section -->
         <section id="recognition" class="content-section">
             <div class="card">
-                <div class="card-header bg-danger text-white">
-                    <h4><i class="fas fa-user-check me-2"></i>Face Recognition</h4>
-                </div>
-                <div class="card-body">
-                    <div class="row mb-4">
-                        <div class="col-md-6">
-                            <h5>Upload Image for Recognition</h5>
-                            <div class="mb-3">
+            <div class="card-header bg-danger text-white">
+            <h4><i class="fas fa-user-check me-2"></i>Face Recognition</h4>
+            </div>
+            <!-- <div class="preview-model">
+                
+            </div> -->
+            <div class="card-body">
+            <div class="row mb-4">
+            <div class="col-md-6">
+                <h5>Upload Image for Recognition</h5>
+                <div class="mb-3">
                                 <label for="recognitionImage" class="form-label">Select Image</label>
                                 <input class="form-control" type="file" id="recognitionImage" accept="image/*">
                             </div>
@@ -366,5 +372,6 @@
     <!-- Custom JavaScript -->
     <script src="/static/js/app.js"></script>
     <script src="/static/js/debug.js"></script>
+    <script src="/static/js/dropdown-debug.js"></script>
 </body>
 </html>

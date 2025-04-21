@@ -153,52 +153,83 @@ async function init() {
     updateRecognizeButtonState();
 }
 
-// Load batch years and departments
+// Replace the loadBatchYearsAndDepartments function with this version
 async function loadBatchYearsAndDepartments() {
+    console.log("Loading batch years and departments...");
     try {
         const response = await fetch(`${API_BASE_URL}/batches`);
+        
+        if (!response.ok) {
+            console.error(`API request failed: ${response.status} ${response.statusText}`);
+            const text = await response.text();
+            console.error("Response text:", text);
+            throw new Error(`API request failed: ${response.status}`);
+        }
+        
         const data = await response.json();
+        console.log("Batch years and departments data:", data);
         
-        // Populate batch year dropdowns
-        const batchYearSelects = document.querySelectorAll('#batchYear, #filterYear, #galleryYear');
-        batchYearSelects.forEach(select => {
-            if (select) {
-                const defaultOption = select.querySelector('option');
-                select.innerHTML = '';
-                if (defaultOption) {
-                    select.appendChild(defaultOption);
-                }
-                
-                data.years.forEach(year => {
-                    const option = document.createElement('option');
-                    option.value = year;
-                    option.textContent = `${year} Year`;
-                    select.appendChild(option);
-                });
-            }
-        });
+        // Special handling for malformed data
+        if (!data.years || !data.departments) {
+            console.error("API response missing years or departments:", data);
+            throw new Error("API response missing years or departments");
+        }
         
-        // Populate department dropdowns
-        const departmentSelects = document.querySelectorAll('#department, #filterDept, #galleryDepartment');
-        departmentSelects.forEach(select => {
-            if (select) {
-                const defaultOption = select.querySelector('option');
-                select.innerHTML = '';
-                if (defaultOption) {
-                    select.appendChild(defaultOption);
-                }
-                
-                data.departments.forEach(dept => {
-                    const option = document.createElement('option');
-                    option.value = dept;
-                    option.textContent = dept;
-                    select.appendChild(option);
-                });
+        // Simple direct approach - update each dropdown manually
+        
+        // Gallery year select
+        const galleryYearSelect = document.getElementById('galleryYear');
+        if (galleryYearSelect) {
+            galleryYearSelect.innerHTML = '<option value="" selected disabled>Select Batch Year</option>';
+            for (const year of data.years) {
+                galleryYearSelect.innerHTML += `<option value="${year}">${year} Year</option>`;
             }
-        });
+            console.log(`Updated galleryYear with ${data.years.length} options`);
+        } else {
+            console.warn("galleryYear select not found in DOM");
+        }
+        
+        // Gallery department select
+        const galleryDeptSelect = document.getElementById('galleryDepartment');
+        if (galleryDeptSelect) {
+            galleryDeptSelect.innerHTML = '<option value="" selected disabled>Select Department</option>';
+            for (const dept of data.departments) {
+                galleryDeptSelect.innerHTML += `<option value="${dept}">${dept}</option>`;
+            }
+            console.log(`Updated galleryDepartment with ${data.departments.length} options`);
+        } else {
+            console.warn("galleryDepartment select not found in DOM");
+        }
+        
+        // Process videos year select
+        const batchYearSelect = document.getElementById('batchYear');
+        if (batchYearSelect) {
+            batchYearSelect.innerHTML = '<option value="" selected disabled>Select Batch Year</option>';
+            for (const year of data.years) {
+                batchYearSelect.innerHTML += `<option value="${year}">${year} Year</option>`;
+            }
+            console.log(`Updated batchYear with ${data.years.length} options`);
+        } else {
+            console.warn("batchYear select not found in DOM");
+        }
+        
+        // Process videos department select
+        const departmentSelect = document.getElementById('department');
+        if (departmentSelect) {
+            departmentSelect.innerHTML = '<option value="" selected disabled>Select Department</option>';
+            for (const dept of data.departments) {
+                departmentSelect.innerHTML += `<option value="${dept}">${dept}</option>`;
+            }
+            console.log(`Updated department with ${data.departments.length} options`);
+        } else {
+            console.warn("department select not found in DOM");
+        }
+        
+        return true;
     } catch (error) {
         console.error('Error loading batch years and departments:', error);
-        showAlert('error', 'Failed to load batch years and departments');
+        showAlert('error', `Failed to load batch years and departments: ${error.message}`);
+        return false;
     }
 }
 
