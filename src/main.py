@@ -164,10 +164,24 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
             
             # Crop face
             face = img[y1:y2, x1:x2]
+            target_size=(128, 128)
             
             # Save face
             img_name = os.path.basename(image_path)
             face_path = os.path.join(output_dir, f"{os.path.splitext(img_name)[0]}_face_{j}.jpg")
+            
+            if len(face.shape) == 3:  # Color image
+                gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
+            else:  # Already grayscale
+                gray = face
+            
+            # Resize to target size
+            resized = cv2.resize(gray, target_size, interpolation=cv2.INTER_LANCZOS4)
+            
+            # Ensure single channel output
+            if len(resized.shape) > 2:
+                resized = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
+
             cv2.imwrite(face_path, face)
             face_paths.append(face_path)
     
