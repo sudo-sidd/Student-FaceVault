@@ -119,15 +119,15 @@ def extract_frames(video_path: str, output_dir: str, max_frames: int = 30, inter
 
 def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEFAULT_YOLO_PATH) -> List[str]:
     """
-    Detect and crop faces from an image using YOLO
+    Detect, crop, and preprocess faces from an image using YOLO
     
     Args:
         image_path: Path to the input image
-        output_dir: Directory to save cropped face images
+        output_dir: Directory to save preprocessed face images
         yolo_path: Path to YOLO model weights
         
     Returns:
-        List of paths to cropped face images
+        List of paths to preprocessed face images
     """
     import cv2
     
@@ -162,27 +162,45 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
             x2 = min(w, x2 + pad_x)
             y2 = min(h, y2 + pad_y)
             
+            # Skip if face is too small
+            if (x2 - x1) < 30 or (y2 - y1) < 30:
+                print(f"Skipping face {j} in {image_path} - too small ({x2-x1}x{y2-y1})")
+                continue
+                
             # Crop face
             face = img[y1:y2, x1:x2]
-            target_size=(128, 128)
             
-            # Save face
+            # Skip empty faces or irregular shapes
+            if face.size == 0 or face.shape[0] <= 0 or face.shape[1] <= 0:
+                print(f"Skipping face {j} in {image_path} - invalid dimensions")
+                continue
+            
+            # Save original cropped face for reference
             img_name = os.path.basename(image_path)
-            face_path = os.path.join(output_dir, f"{os.path.splitext(img_name)[0]}_face_{j}.jpg")
+            original_face_path = os.path.join(output_dir, f"{os.path.splitext(img_name)[0]}_face_orig_{j}.jpg")
+            # cv2.imwrite(original_face_path, face)
             
+            # Preprocess face properly for LightCNN:
+            
+            # 1. Convert to grayscale
             if len(face.shape) == 3:  # Color image
                 gray = cv2.cvtColor(face, cv2.COLOR_BGR2GRAY)
             else:  # Already grayscale
                 gray = face
+                
+            # 2. Resize to 128x128 (LightCNN input size)
+            # Use INTER_LANCZOS4 for best quality when downsizing
+            resized = cv2.resize(gray, (128, 128), interpolation=cv2.INTER_LANCZOS4)
             
-            # Resize to target size
-            resized = cv2.resize(gray, target_size, interpolation=cv2.INTER_LANCZOS4)
+            # 3. Normalize pixel values to [0, 1] range
+            normalized = resized.astype(np.float32) / 255.0
             
-            # Ensure single channel output
-            if len(resized.shape) > 2:
-                resized = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-
-            cv2.imwrite(face_path, face)
+            # 4. Apply histogram equalization for better contrast
+            equalized = cv2.equalizeHist(resized)
+            
+            # 5. Save preprocessed face
+            face_path = os.path.join(output_dir, f"{os.path.splitext(img_name)[0]}_face_{j}.jpg")
+            cv2.imwrite(face_path, equalized)
             face_paths.append(face_path)
     
     return face_paths
@@ -315,18 +333,24 @@ def recognize_faces(
     gallery_paths: Union[str, List[str]], 
     model_path: str = DEFAULT_MODEL_PATH,
     yolo_path: str = DEFAULT_YOLO_PATH,
-    threshold: float = 0.45
+    threshold: float = 0.45,
+    model=None,
+    device=None,
+    yolo_model=None
 ) -> Tuple[np.ndarray, List[Dict[str, Any]]]:
     """
     Recognize faces in a given frame using one or more galleries.
     Implements a no-duplicate rule where each identity appears only once.
-
+    
     Args:
         frame: Input image (numpy array in BGR format from cv2)
         gallery_paths: Single gallery path or list of gallery paths
         model_path: Path to LightCNN model
         yolo_path: Path to YOLO face detection model
         threshold: Minimum similarity threshold (0-1)
+        model: Pre-loaded model (optional)
+        device: Pre-loaded device (optional)
+        yolo_model: Pre-loaded YOLO model (optional)
         
     Returns:
         Tuple containing:
@@ -336,28 +360,30 @@ def recognize_faces(
     if isinstance(gallery_paths, str):
         gallery_paths = [gallery_paths]
     
-    # Load model and YOLO
-    model, device = load_model(model_path)
-    yolo_model = YOLO(yolo_path)
+    # Load model and YOLO if not provided
+    if model is None or device is None:
+        model, device = load_model(model_path)
+    
+    if yolo_model is None:
+        yolo_model = YOLO(yolo_path)
     
     # Load and combine all galleries
     combined_gallery = {}
     for gallery_path in gallery_paths:
         if os.path.exists(gallery_path):
-            gallery_data = torch.load(gallery_path)
-            # Check if the gallery is in the expected format
-            if isinstance(gallery_data, dict):
-                if "identities" in gallery_data:
-                    # If the gallery has an "identities" key
-                    combined_gallery.update(gallery_data["identities"])
-                else:
-                    # Direct dictionary mapping of identities to embeddings
-                    combined_gallery.update(gallery_data)
+            try:
+                gallery_data = torch.load(gallery_path)
+                # Handle different gallery formats
+                if isinstance(gallery_data, dict):
+                    if "identities" in gallery_data:
+                        combined_gallery.update(gallery_data["identities"])
+                    else:
+                        combined_gallery.update(gallery_data)
+            except Exception as e:
+                print(f"Error loading gallery {gallery_path}: {e}")
     
     if not combined_gallery:
         return frame, []
-    
-    result_img = frame.copy()
     
     # Step 1: Detect faces using YOLO
     face_detections = []
@@ -380,10 +406,14 @@ def recognize_faces(
             # Extract face image
             face = frame[y1:y2, x1:x2]
             
+            # Skip if face is too small
+            if face.size == 0 or face.shape[0] < 10 or face.shape[1] < 10:
+                continue
+                
             # Convert BGR to grayscale PIL image
             face_pil = Image.fromarray(cv2.cvtColor(face, cv2.COLOR_BGR2GRAY))
             
-            # Transform for model input using the same transform as gallery_manager.py
+            # Transform for model input
             transform = transforms.Compose([
                 transforms.Resize((128, 128)),
                 transforms.ToTensor(),
@@ -414,7 +444,6 @@ def recognize_faces(
             })
     
     # Step 2: Assign identities without duplicates - using greedy approach
-    # First, sort all faces by their best match confidence (highest first)
     face_detections.sort(key=lambda x: x["matches"][0][1] if x["matches"] else 0, reverse=True)
     
     assigned_identities = set()
@@ -426,39 +455,66 @@ def recognize_faces(
         
         # Find the best non-assigned match
         best_match = None
-        best_score = 0.0  # Ensure this is a Python float, not numpy.float32
+        best_score = 0.0
         
         for identity, score in matches:
             if identity not in assigned_identities:
                 best_match = identity
-                # Convert numpy.float32 to Python float
                 best_score = float(score)
                 break
         
-        # Add result to detected_faces list
+        # Store recognition result
         if best_match:
             detected_faces.append({
                 "identity": best_match,
-                "similarity": best_score,  # This is now a Python float
-                "bounding_box": [int(x1), int(y1), int(x2), int(y2)]  # Convert to Python integers
+                "similarity": best_score,
+                "bounding_box": [int(x1), int(y1), int(x2), int(y2)]
             })
             assigned_identities.add(best_match)
-            
-            # Annotate the frame
-            cv2.rectangle(result_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            label = f"{best_match} ({best_score:.2f})"
-            cv2.putText(result_img, label, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
         else:
             # No match found - mark as unknown
             detected_faces.append({
                 "identity": "Unknown",
-                "similarity": 0.0,  # Python float
-                "bounding_box": [int(x1), int(y1), int(x2), int(y2)]  # Convert to Python integers
+                "similarity": 0.0,
+                "bounding_box": [int(x1), int(y1), int(x2), int(y2)]
             })
-            
-            # Annotate the frame
-            cv2.rectangle(result_img, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(result_img, "Unknown", (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+    
+    # Step 3: Draw annotations as the final step
+    result_img = frame.copy()
+    
+    for face_info in detected_faces:
+        identity = face_info["identity"]
+        similarity = face_info["similarity"]
+        x1, y1, x2, y2 = face_info["bounding_box"]
+        
+        # Choose color based on whether it's a known or unknown face
+        color = (0, 255, 0) if identity != "Unknown" else (0, 0, 255)
+        
+        # Draw bounding box
+        cv2.rectangle(result_img, (x1, y1), (x2, y2), color, 2)
+        
+        # Draw label
+        label = f"{identity} ({similarity:.2f})" if identity != "Unknown" else "Unknown"
+        
+        # Create slightly darker shade for text background
+        text_bg_color = (int(color[0] * 0.7), int(color[1] * 0.7), int(color[2] * 0.7))
+        
+        # Get text size for better positioning
+        text_size, _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)
+        text_w, text_h = text_size
+        
+        # Draw text background
+        cv2.rectangle(result_img, 
+                     (x1, y1 - text_h - 8), 
+                     (x1 + text_w, y1), 
+                     text_bg_color, -1)
+        
+        # Draw text
+        cv2.putText(result_img, 
+                   label, 
+                   (x1, y1 - 5), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 
+                   0.5, (255, 255, 255), 2)
     
     return result_img, detected_faces
 
@@ -757,7 +813,7 @@ async def recognize_image(
     """
     Recognize faces in an uploaded image using selected galleries
     
-    Parameters:
+    Parameters:ize
     - image: Image file to analyze
     - galleries: List of gallery filenames
     - threshold: Similarity threshold (0-1)
