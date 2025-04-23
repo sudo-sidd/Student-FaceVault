@@ -11,12 +11,76 @@ from ultralytics import YOLO
 import cv2
 from tqdm import tqdm
 import pandas as pd
+import random
+import albumentations as A
 
 # Consistent image transformation
 transform = transforms.Compose([
     transforms.Resize((128, 128)),
     transforms.ToTensor(),
 ])
+
+def create_face_augmentations():
+    """Create a set of specific augmentations for face images"""
+    augmentations = [
+        # Downscaling and Upscaling
+        A.Compose([
+            A.Resize(height=32, width=32),  # Downscale to low resolution
+            A.Resize(height=128, width=128)  # Upscale back to original size
+        ]),
+        A.Compose([
+            A.Resize(height=24, width=24),  # Downscale to low resolution
+            A.Resize(height=128, width=128)  # Upscale back to original size
+        ]),
+        
+        # Brightness and Contrast Adjustment
+        A.RandomBrightnessContrast(p=1.0, brightness_limit=(-0.2, 0.2), contrast_limit=(-0.2, 0.2)),
+        
+        # Gaussian Blur
+        A.GaussianBlur(p=1.0, blur_limit=(3, 7)),
+        
+        # Combined: Downscale + Blur
+        A.Compose([
+            A.Resize(height=48, width=48),
+            A.Resize(height=128, width=128),
+            A.GaussianBlur(p=1.0, blur_limit=(2, 5))
+        ]),
+        A.Compose([
+            A.Resize(height=32, width=32),
+            A.Resize(height=128, width=128),
+            A.GaussianBlur(p=1.0, blur_limit=(2, 5))
+        ]),
+    ]
+    return augmentations
+
+def augment_face_image(image, num_augmentations=2):
+    """
+    Generate augmented versions of a face image in-memory
+    
+    Args:
+        image: Original face image (numpy array)
+        num_augmentations: Number of augmented versions to generate
+    
+    Returns:
+        List of augmented images (numpy arrays)
+    """
+    augmentations_list = create_face_augmentations()
+    augmented_images = []
+    
+    for i in range(num_augmentations):
+        # Select random augmentation
+        selected_aug = random.choice(augmentations_list)
+        
+        # Apply augmentation
+        if isinstance(selected_aug, A.Compose):
+            augmented = selected_aug(image=image)
+        else:
+            aug_pipeline = A.Compose([selected_aug])
+            augmented = aug_pipeline(image=image)
+        
+        augmented_images.append(augmented['image'])
+    
+    return augmented_images
 
 def load_model(model_path):
     """Load LightCNN model with correct architecture"""

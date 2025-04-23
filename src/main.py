@@ -16,6 +16,8 @@ from PIL import Image
 from torchvision import transforms
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import random
+import albumentations as A
 
 import sys
 sys.path.append('/mnt/data/PROJECTS/Face_data-application/gallery')
@@ -211,6 +213,68 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
             face_paths.append(face_path)
     
     return face_paths
+
+def create_face_augmentations():
+    """Create a set of specific augmentations for face images"""
+    augmentations = [
+        # Downscaling and Upscaling
+        A.Compose([
+            A.Resize(height=32, width=32),  # Downscale to low resolution
+            A.Resize(height=128, width=128)  # Upscale back to original size
+        ]),
+        A.Compose([
+            A.Resize(height=24, width=24),  # Downscale to low resolution
+            A.Resize(height=128, width=128)  # Upscale back to original size
+        ]),
+        
+        # Brightness and Contrast Adjustment
+        A.RandomBrightnessContrast(p=1.0, brightness_limit=(-0.2, 0.2), contrast_limit=(-0.2, 0.2)),
+        
+        # Gaussian Blur
+        A.GaussianBlur(p=1.0, blur_limit=(3, 7)),
+        
+        # Combined: Downscale + Blur
+        A.Compose([
+            A.Resize(height=48, width=48),
+            A.Resize(height=128, width=128),
+            A.GaussianBlur(p=1.0, blur_limit=(2, 5))
+        ]),
+        A.Compose([
+            A.Resize(height=32, width=32),
+            A.Resize(height=128, width=128),
+            A.GaussianBlur(p=1.0, blur_limit=(2, 5))
+        ]),
+    ]
+    return augmentations
+
+def augment_face_image(image, num_augmentations=2):
+    """
+    Generate augmented versions of a face image in-memory
+    
+    Args:
+        image: Original face image (numpy array)
+        num_augmentations: Number of augmented versions to generate
+    
+    Returns:
+        List of augmented images (numpy arrays)
+    """
+    augmentations_list = create_face_augmentations()
+    augmented_images = []
+    
+    for i in range(num_augmentations):
+        # Select random augmentation
+        selected_aug = random.choice(augmentations_list)
+        
+        # Apply augmentation
+        if isinstance(selected_aug, A.Compose):
+            augmented = selected_aug(image=image)
+        else:
+            aug_pipeline = A.Compose([selected_aug])
+            augmented = aug_pipeline(image=image)
+        
+        augmented_images.append(augmented['image'])
+    
+    return augmented_images
 
 def process_videos_directory(videos_dir: str, year: str, department: str) -> ProcessingResult:
     """
@@ -664,7 +728,9 @@ async def process_videos(
 async def create_gallery_endpoint(
     year: str = Form(...),
     department: str = Form(...),
-    update_existing: bool = Form(False)
+    update_existing: bool = Form(False),
+    augment_ratio: float = Form(1.0),
+    augs_per_image: int = Form(2)
 ):
     """
     Create or update a gallery from preprocessed face data
@@ -673,6 +739,8 @@ async def create_gallery_endpoint(
     - year: Batch year (e.g., "1st", "2nd")
     - department: Department name (e.g., "CS", "IT")
     - update_existing: Whether to update an existing gallery or create a new one
+    - augment_ratio: Ratio of images to augment (0.0 to 1.0)
+    - augs_per_image: Number of augmentations per selected image
     """
     # Validate batch year and department
     if year not in database.get_batch_years():
@@ -694,13 +762,15 @@ async def create_gallery_endpoint(
     
     try:
         if update_existing and os.path.exists(gallery_path):
-            # Update existing gallery
-            update_gallery(DEFAULT_MODEL_PATH, gallery_path, data_path, gallery_path)
-            message = f"Updated gallery for {department} {year}"
+            # Update existing gallery with augmentation
+            update_gallery(DEFAULT_MODEL_PATH, gallery_path, data_path, gallery_path, 
+                          augment_ratio=augment_ratio, augs_per_image=augs_per_image)
+            message = f"Updated gallery for {department} {year} with augmentation"
         else:
-            # Create new gallery
-            create_gallery(DEFAULT_MODEL_PATH, data_path, gallery_path)
-            message = f"Created gallery for {department} {year}"
+            # Create new gallery with augmentation
+            create_gallery(DEFAULT_MODEL_PATH, data_path, gallery_path,
+                          augment_ratio=augment_ratio, augs_per_image=augs_per_image)
+            message = f"Created gallery for {department} {year} with augmentation"
         
         # Get gallery info
         gallery_info = get_gallery_info(gallery_path)
@@ -709,10 +779,13 @@ async def create_gallery_endpoint(
             "message": message,
             "gallery_path": gallery_path,
             "identities_count": gallery_info.count if gallery_info else 0,
+            "augmentation_applied": augment_ratio > 0 and augs_per_image > 0,
+            "augment_ratio": augment_ratio,
+            "augs_per_image": augs_per_image,
             "success": True
         }
     except Exception as e:
-        print(f"Error creating/updating gallery: {e}")
+        print(f"Error creating/updating gallery with augmentation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create/update gallery: {str(e)}")
 
 @app.post("/batches/year", status_code=201, summary="Add a new batch year")
