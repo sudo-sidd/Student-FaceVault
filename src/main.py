@@ -131,6 +131,8 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
     """
     import cv2
     
+    print(f"Processing image: {image_path}")
+    
     os.makedirs(output_dir, exist_ok=True)
     
     # Load YOLO model
@@ -144,6 +146,8 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
     
     # Detect faces
     results = model(img)
+    
+    print(f"YOLO detected {sum(len(r.boxes) for r in results)} faces in {image_path}")
     
     face_paths = []
     for i, result in enumerate(results):
@@ -162,8 +166,11 @@ def detect_and_crop_faces(image_path: str, output_dir: str, yolo_path: str = DEF
             x2 = min(w, x2 + pad_x)
             y2 = min(h, y2 + pad_y)
             
-            # Skip if face is too small
-            if (x2 - x1) < 30 or (y2 - y1) < 30:
+            print(f"Face {j} dimensions before padding: {x2-x1}x{y2-y1}")
+            print(f"Face {j} dimensions after padding: {max(0, x1-pad_x)}-{min(w, x2+pad_x)}x{max(0, y1-pad_y)}-{min(h, y2+pad_y)}")
+            
+            # Skip if face coordinates are too small
+            if (x2 - x1) < 32 or (y2 - y1) < 32:
                 print(f"Skipping face {j} in {image_path} - too small ({x2-x1}x{y2-y1})")
                 continue
                 
@@ -387,7 +394,7 @@ def recognize_faces(
     
     # Step 1: Detect faces using YOLO
     face_detections = []
-    results = yolo_model(frame)
+    results = yolo_model(frame,conf=0.7)
     
     for result in results:
         for box in result.boxes:
@@ -403,6 +410,10 @@ def recognize_faces(
             x2 = min(w, x2 + pad_x)
             y2 = min(h, y2 + pad_y)
             
+            if (x2 - x1) < 35 or (y2 - y1) < 35:
+                print(f"  WOULD SKIP FACE  - too small (testing with 5000px threshold)")
+                continue
+        
             # Extract face image
             face = frame[y1:y2, x1:x2]
             
