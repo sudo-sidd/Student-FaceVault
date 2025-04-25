@@ -474,7 +474,7 @@ def recognize_faces(
             x2 = min(w, x2 + pad_x)
             y2 = min(h, y2 + pad_y)
             
-            if (x2 - x1) < 35 or (y2 - y1) < 35:
+            if (x2 - x1) < 32 or (y2 - y1) < 32:
                 print(f"  WOULD SKIP FACE  - too small (testing with 5000px threshold)")
                 continue
         
