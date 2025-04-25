@@ -1,8 +1,8 @@
-# Face Recognition Gallery Manager
+## **Student-FaceVault**
 
 ## Overview
 
-Face Recognition Gallery Manager is a web application for creating and managing face recognition galleries, primarily designed for educational institutions to organize student face data by batch/year and department. The system processes videos to extract faces, builds recognition galleries, and provides a user-friendly interface for face recognition.
+**Student-FaceVault** is a web application for creating and managing face recognition galleries, primarily designed for educational institutions to organize student face data by batch/year and department. The system processes videos to extract faces, builds recognition galleries, and provides a user-friendly interface for face recognition.
 
 ## Features
 
